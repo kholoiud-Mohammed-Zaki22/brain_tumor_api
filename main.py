@@ -16,15 +16,48 @@ CLASS_NAMES = ["Glioma", "Meningioma", "No Tumor", "Pituitary"]
 MAX_FILE_SIZE_MB = 10
 
 # ── Download model if not exists ──────────────────────────────────────────────
+def download_model_from_gdrive(file_id: str, output_path: str, max_retries: int = 3):
+    """Download model from Google Drive with retry logic."""
+    for attempt in range(1, max_retries + 1):
+        try:
+            print(f"Downloading model from Google Drive (attempt {attempt}/{max_retries})...")
+            gdown.download(
+                f"https://drive.google.com/uc?id={file_id}&export=download&confirm=t",
+                output_path,
+                quiet=False,
+                fuzzy=True,
+            )
+            
+            # Verify file exists and has content
+            if not os.path.exists(output_path):
+                raise FileNotFoundError(f"Download failed: {output_path} does not exist")
+            
+            file_size = os.path.getsize(output_path)
+            if file_size == 0:
+                raise ValueError(f"Downloaded file is empty (0 bytes)")
+            
+            print(f"Download complete ✓ (Size: {file_size / (1024*1024):.2f} MB)")
+            return True
+            
+        except Exception as e:
+            print(f"Attempt {attempt} failed: {e}")
+            # Clean up partial download
+            if os.path.exists(output_path):
+                try:
+                    os.remove(output_path)
+                except:
+                    pass
+            
+            if attempt == max_retries:
+                raise RuntimeError(
+                    f"Failed to download model after {max_retries} attempts. "
+                    f"Last error: {e}"
+                )
+    
+    return False
+
 if not os.path.exists(MODEL_PATH):
-    print("Downloading model from Google Drive...")
-    gdown.download(
-        f"https://drive.google.com/uc?id={GDRIVE_ID}&export=download&confirm=t",
-        MODEL_PATH,
-        quiet=False,
-        fuzzy=True,
-    )
-    print("Download complete ✓")
+    download_model_from_gdrive(GDRIVE_ID, MODEL_PATH)
 
 # ── Load model ────────────────────────────────────────────────────────────────
 print("Loading model...")
@@ -128,3 +161,4 @@ async def predict(file: UploadFile = File(..., description="MRI image (JPG/PNG)"
         probabilities=probabilities,
         model="EfficientNetB0",
     )
+
